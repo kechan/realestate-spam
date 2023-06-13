@@ -32,7 +32,7 @@ class ToxicDetectionModel:
   def __call__(self, *args: Any, **kwds: Any) -> Any:
     return self.get_toxicity(*args, **kwds)
 
-  def get_toxicity(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True) -> pd.DataFrame:
+  def get_toxicity(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True, verbose=False) -> pd.DataFrame:
     """Returns a list of toxicity scores for each message in messages.
     
     Args:
@@ -42,7 +42,8 @@ class ToxicDetectionModel:
     Returns:
       A pandas dataframe holding the results
     """
-    
+    optional_tqdm = lambda x, verbose=False: tqdm(x) if verbose else x
+
     if isinstance(messages, str): messages = [messages]
     
     probs = {'message': []}
@@ -52,7 +53,7 @@ class ToxicDetectionModel:
       messages = [html.unescape(message) for message in messages]
 
     # for message in messages:
-    for i in tqdm(range(0, len(messages), batch_size)):
+    for i in optional_tqdm(range(0, len(messages), batch_size)):
       batch = messages[i: i+batch_size]
 
       probs['message'].extend(batch)

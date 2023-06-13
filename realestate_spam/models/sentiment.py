@@ -26,12 +26,13 @@ class SentimentClassificationModel:
     else:
       self.empty_cache_func = lambda: None
 
-  def get_sentiment(self, messages: List[str], batch_size=64, html_unescape=True) -> pd.DataFrame:
-    probs = {'message': [], 'NEGATIVE': [], 'POSITIVE': []}
-    # if html_unescape:
-    #   messages = [html.unescape(message) for message in messages]
+  def get_sentiment(self, messages: List[str], batch_size=64, html_unescape=True, return_df=True, verbose=False) -> pd.DataFrame:
+    optional_tqdm = lambda x, verbose=False: tqdm(x) if verbose else x
 
-    for i in tqdm(range(0, len(messages), batch_size)):
+    if isinstance(messages, str): messages = [messages]
+
+    probs = {'message': [], 'NEGATIVE': [], 'POSITIVE': []}
+    for i in optional_tqdm(range(0, len(messages), batch_size)):
       
       batch = messages[i: i+batch_size]
       probs['message'].extend(batch)
@@ -54,7 +55,11 @@ class SentimentClassificationModel:
       gc.collect()
       self.empty_cache_func()
 
-    return pd.DataFrame(probs)
+    if return_df:
+      return pd.DataFrame(probs)
+    else:
+      return probs
+    
 
 
 

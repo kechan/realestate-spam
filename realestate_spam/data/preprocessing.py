@@ -11,7 +11,15 @@ def coalesce_contact_cols(row):
   family_name = row.FAMILY_NAME
   display_name = row.DISPLAY_NAME
 
-  return f"GIVEN_NAME: {given_name}, INITIAL_NAME: {initial_name}, MIDDLE_NAME: {middle_name}, FAMILY_NAME: {family_name}, DISPLAY_NAME: {display_name}"
+  return coalesce_contact_cols_with(given_name, initial_name, middle_name, family_name, display_name)
+
+
+def coalesce_contact_cols_with(given_name, initial_name, middle_name, family_name, display_name):
+    """
+    Combines the input names into a new string format.
+    """
+    return f"GIVEN_NAME: {given_name}, INITIAL_NAME: {initial_name}, MIDDLE_NAME: {middle_name}, FAMILY_NAME: {family_name}, DISPLAY_NAME: {display_name}"
+
 
 # TODO: refactor the following 2 functions
 def keep_user_input_only(df: pd.DataFrame):
