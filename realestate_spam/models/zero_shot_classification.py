@@ -36,14 +36,16 @@ class ZeroShotClassificationModel:
     else:
       self.empty_cache_func = lambda: None
 
-  def __call__(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True) -> pd.DataFrame:
+  def __call__(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True, verbose=False) -> pd.DataFrame:
+    optional_tqdm = lambda x, verbose=False: tqdm(x) if verbose else x
+
     if isinstance(messages, str): messages = [messages]
 
     # probs as dict to hold the prediction score for each class
     probs = {'message': []}
     probs = {**probs, **{class_name: [] for class_name in self.class_names}}
 
-    for i in range(0, len(messages), batch_size):
+    for i in optional_tqdm(range(0, len(messages), batch_size)):
       batch = messages[i: i+batch_size]
       probs['message'].extend(batch)
 

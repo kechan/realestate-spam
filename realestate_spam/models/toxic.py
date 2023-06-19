@@ -42,7 +42,7 @@ class ToxicDetectionModel:
     Returns:
       A pandas dataframe holding the results
     """
-    optional_tqdm = lambda x, verbose=False: tqdm(x) if verbose else x
+    optional_tqdm = lambda x: tqdm(x) if verbose else x
 
     if isinstance(messages, str): messages = [messages]
     

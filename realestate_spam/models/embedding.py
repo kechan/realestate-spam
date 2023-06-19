@@ -21,12 +21,14 @@ class EmbeddingModel:
     else:
       self.empty_cache_func = lambda: None
 
-  def embed(self, messages: List[str], batch_size=128, html_unescape=True):
+  def embed(self, messages: List[str], batch_size=128, html_unescape=True, verbose=False):
+    optional_tqdm = lambda x: tqdm(x) if verbose else x
+
     if html_unescape:
       messages = [html.unescape(message) for message in messages]
 
     embeddings = []
-    for i in tqdm(range(0, len(messages), batch_size)):
+    for i in optional_tqdm(range(0, len(messages), batch_size)):
       batch = messages[i: i+batch_size]
       with torch.no_grad():
         embeddings.extend(self.model.encode(batch, convert_to_tensor=True).cpu().numpy())
