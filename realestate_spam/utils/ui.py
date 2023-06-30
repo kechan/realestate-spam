@@ -60,6 +60,10 @@ class EditableDataFrame:
     self._display_df = self.df.loc[self._indices][self.display_cols]
     self._criteria = None  # critera filter not used if indices is provided, and vice versa
 
+  def set_indices(self, new_indices):
+    self.indices = new_indices 
+    return self
+
   def render(self) -> VBox:  
     # assert self._display_df is not None, 'a filter or indice must be provided'
     if self._display_df is None:

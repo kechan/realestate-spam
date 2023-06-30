@@ -3,9 +3,22 @@ from typing import List, Tuple
 import openai, time, re, json, gc, tempfile, os
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
+from tenacity import retry, wait_random_exponential, stop_after_attempt, RetryError
 # will use openai API gpt-3.5-turbo and/or manually in chat.openai.com (chatGPT)
+
+@retry(wait=wait_random_exponential(min=1, max=40), stop=stop_after_attempt(3), retry_error_cls=RetryError)
+def _retry_get_completion(model, temperature, max_tokens, messages):  
+  response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+  return response.choices[0].message["content"]
+
+
 
 class AugGPT:
   def __init__(self, model="gpt-3.5-turbo", temperature=0.5, max_tokens=1024):
@@ -50,13 +63,9 @@ class AugGPT:
   # openai.ChatCompletion.create
   def get_completion(self, prompt):
     messages = [{"role": "user", "content": prompt}]
-    response = openai.ChatCompletion.create(
-      model=self.model,
-      messages=messages,
-      temperature=self.temperature, # this is the degree of randomness of the model's output
-      max_tokens=self.max_tokens, # the maximum number of tokens to generate
-    )
-    return response.choices[0].message["content"]
+    return _retry_get_completion(self.model, self.temperature, self.max_tokens, messages)
+    
+
 
   def _partial_json_parse(self, payload, keys):
     """
@@ -137,7 +146,7 @@ class TestAugGPT(AugGPT):
 
     return test_augs_df, chatgpt_responses, response_list, badly_formed_responses
 
-  def reconstruct_augs_df(self, messages: List[str], response_list: List[List[str]]):
+  def reconstruct_augs_df(self, messages: List[str], response_list: List[List[str]]) -> pd.DataFrame:
     """
     chatGPT can give malformed json (or no response at all). After response_list is manually fixed,
     we can reconstruct the test_augs_df
@@ -334,10 +343,104 @@ messages are independent of each other.
     return responses, response_list, badly_formed_responses
 
 
+class ChineseAugGPT(AugGPT):
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
 
+  def get_aug_messages(self, messages: List[str], batch_size=1, num_of_aug_mesg_per_mesg=1, return_raw_response_only=False, verbose=True) -> Tuple[pd.DataFrame, List[str], List[List[str]], List[str]]:
+    '''
+    Input: 
+    messages: a list of source messages to be data augmented (source should be in english)
+    batch_size: the # of source messages to submit to chatGPT per completion request. (only 1 allowed for now)
+    num_of_aug_mesg_per_mesg: the # of augmented messages to generate per source message (only 1 for chinese augmentation from translation)
+
+    Output:
+    aug_df: a dataframe with columns: message, message_augs where message is the original message and message_augs is corresponding augmented messages
+    chatgpt_raw_resp: the list of raw responses from chatgpt (for safe keeping, this is expensive to obtain)
+    response_list: post-formatted list of responses from chatgpt, empty => unrecoverd malformed response
+    badly_formed_responses: list of raw malformed responses (for debugging)
+    '''
+    assert batch_size == 1, "batch_size must be 1 for chinese augmentation"
+    assert num_of_aug_mesg_per_mesg == 1, "num_of_aug_mesg_per_mesg must be 1 for chinese augmentation"
+
+    prompt_generator = self.get_prompt_generator(messages, batch_size=batch_size, num_of_aug_mesg_per_mesg=num_of_aug_mesg_per_mesg)
+    chatgpt_responses = []
+    for k, prompt in enumerate(prompt_generator):
+      print(f'Processing {k} using prompt: {prompt}')
+      try:
+        response = self.get_completion(prompt)
+        chatgpt_responses.append(response)
+        time.sleep(1)
+
+      except RetryError as e: 
+        print(f"Max retries exceeded for k: {k}, prompt: {prompt}")
+        print(f"Error: {e}") 
+        chatgpt_responses.append(' ')       # just put in empty placeholders
+        continue
+
+      except Exception as e:  # possibly no response, or malformed response
+        print(f"Error: {e}")        
+        chatgpt_responses.append(' ')       # just put in empty placeholders
+        time.sleep(5)    # sleep a bit more after a failure
+        continue
+
+    # chatGPT response cost $$, so save them in a temp file generated on the fly
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+      f.write('\n'.join(chatgpt_responses))
+      self.chatgpt_responses_file = f.name
+      print('Raw chatgpt responses saved to: ', self.chatgpt_responses_file)
+
+    if return_raw_response_only:
+      return None, chatgpt_responses, [[]], []
+    
+    chatgpt_responses, response_list, badly_formed_responses = self._format_chatgpt_responses(chatgpt_responses, batch_size=batch_size)
+
+    # len(response_list) can be > than len(messages) if last batch is not full, so truncate response_list
+    response_list = response_list[:len(messages)]
+
+    chinese_augs_df = pd.DataFrame(data={'message': messages, 'message_aug': response_list})
+
+    return chinese_augs_df, chatgpt_responses, response_list, badly_formed_responses
+
+
+  def get_prompt_generator(self, messages: List[str], batch_size=1, num_of_aug_mesg_per_mesg=1):
+    assert batch_size == 1, "batch_size must be 1 for chinese augmentation"
+    assert num_of_aug_mesg_per_mesg == 1, "num_of_aug_mesg_per_mesg must be 1 for chinese augmentation"
+    
+    for i in range(0, len(messages), batch_size):
+      batch_messages = messages[i:i+batch_size]
+      
+      prompt = f"""Please translate the paragraph delimited by ``` (3 backticks) to Chinese:\n```\n{batch_messages[0]}\n```
+      """
+      yield prompt
+
+  def _format_chatgpt_responses(self, responses: List[str], batch_size) -> Tuple[List[str], List[List[str]], List[str]]:
+    """
+    Output: 
+    responses: a list of raw responses from chatgpt (for safe keeping, this is expensive to obtain)
+    response_list: post-formatted list of responses from chatgpt, empty => unrecoverd malformed response
+    badly_formed_responses: list of raw malformed responses (for debugging)
+    """
+    badly_formed_responses = []
+    response_list = responses.copy()
+    
+    return responses, response_list, badly_formed_responses
+
+  def reconstruct_augs_df(self, messages: List[str], response_list: List[List[str]]) -> pd.DataFrame:
+    """
+    chatGPT can give malformed json (or no response at all). After response_list is manually fixed,
+    we can reconstruct the test_augs_df
+
+    input: list of messages and list of list of augmented messages
+    output: dataframe with original message
+    """
+    chinese_augs_df = pd.DataFrame(data={'message': messages, 'message_aug': response_list})
+
+    return chinese_augs_df
+  
 
 class AugmentedDataGenerator:
-  def __init__(self, external_data_df, train_df):
+  def __init__(self, external_data_df, train_df, filter_with_train=True):
     # dataframe with columns: NOTE, NOTE_AUG where NOTE is the original message and NOTE_AUG is corresponding augmented messages
 
     # train_df (after split)    
@@ -346,7 +449,7 @@ class AugmentedDataGenerator:
     # find all external_data_df source note (NOTE) thats a substring in at least one of train_df.NOTE
     # Skip if external_data_df does not have source (NOTE),
 
-    if 'NOTE' in external_data_df.columns:
+    if 'NOTE' in external_data_df.columns and filter_with_train:
       train_notes = list(self.train_df.NOTE.unique())
       external_source_notes = list(external_data_df.NOTE.unique())
       
@@ -360,7 +463,6 @@ class AugmentedDataGenerator:
       self.external_data_df = external_data_df.q("NOTE.isin(@wanted_external_source_notes)").copy()
     else:
       self.external_data_df = external_data_df.copy()
-
 
   def apply_additional_filters(self, expr: str):
     '''
@@ -666,6 +768,139 @@ class KaggleToxicAugmentedDataGenerator(AugmentedDataGenerator):
 
     return matches
 
+
+class ChineseAugmentedDataGenerator(AugmentedDataGenerator):
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+
+    self.expressions = [
+        (r"\b(?:https?://)?(?:www\.)?([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b", True),
+        ("Website Contact Request - ", False),
+        ("Website Information Request - ", False),
+        ("Website Home Valuation Request - ", False),
+        ("Website Dream Home Request - ", False),
+        ("Website Careers Request", False),
+        ("Website Join Team Request", False),
+        ("New Exclusive Buying", False),
+        ("New Exclusive Selling", False),
+        ("Website Listing Info Request - ", False),
+        ("Website Free Home Evaluation Request - ", False),
+        (r"MLS® \w*\d+\s*-?\s*", True),
+        (r"MLS® \w*\d+Website Listing Info Request - ", True),
+        (r"MLS&reg; \w*\d+\s*-?\s*", True),
+        (r"MLS&reg; \w*\d+Website Listing Info Request - ", True),
+        (r"Single Property Website\s*:\s*New MLS® \w*\d+", True),
+        (r"Single Property Website\s*:?\s*", True),
+        (r"New Listing ID:\s*\w*\d+\s*", True),
+        (r"Listing ID:\s*\w*\d+\s*", True),
+        (r"(?i)(buying|selling|both)\s+house\s+([$\d,]+)\s+-\s+([$\d,]+)", True),
+        # ("^\s*House\s*", True),
+        (r"[\\n\s]House[\\n\s]", True),
+        ("[\\n\s]Buying House[\\n\s]", True),
+        ("[\\n\s]Selling House[\\n\s]", True),
+        ("[\\n\s]Both House[\\n\s]", True)
+    ]
+
+
+  def generate_aug_df(self, n, label):
+    touch_entry_ids, source_notes, notes, display_names, contact_struct_infos = [], [], [], [], []
+    query = f'class_label == "{label}"'
+    for i in tqdm(range(n)):
+      source_message, new_message, display_name, contact_struct_info, matches, chatgpt_augmented_mesg = self.generate_new_message(query=query)
+      source_notes.append(source_message)
+      notes.append(new_message)
+      display_names.append(display_name)
+      contact_struct_infos.append(contact_struct_info)
+      touch_entry_ids.append(-np.random.randint(0, 1000000))
+
+    aug_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
+                                    'SOURCE_NOTE': source_notes, 
+                                    'NOTE': notes, 
+                                    'DISPLAY_NAME': display_names, 
+                                    'CONTACT_STRUCT_INFO': contact_struct_infos, 
+                                    'class_label': label})
+  
+    return aug_df
+  
+  def generate_new_message(self, query):
+    source_message = self.train_df.q(query).sample(1).NOTE.values[0]
+
+    # sample a chinese names
+    display_name, contact_struct_info = self.train_df.q(f"lang == 'zh'").sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+
+    matches = self._find_pattern_matches(source_message)
+
+    sample_external_data_df = self.external_data_df.sample(1)
+    # original_message = sample_external_data_df.NOTE.values[0]
+    augmented_message = sample_external_data_df.NOTE_AUG.values[0]
+
+    # randomize between ' ' and '\n'
+    sep_c1 = ' ' if np.random.rand() > 0.5 else '\n'
+    sep_c2 = ' ' if np.random.rand() > 0.5 else '\n'
+
+    try:
+      if len(matches) == 0:
+        new_message = augmented_message
+      else:
+        new_message = self._replace_with_message(source_message, matches, sep_c1 + augmented_message + sep_c2)
+    except Exception as e:
+      print(source_message, matches, augmented_message)
+      print(f"Exception: {e}")
+      raise e
+
+    return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+  
+  def _replace_with_message(self, message, ranges, test_message):
+    # sort ranges by start position
+    ranges.sort(key=lambda x: x[0])
+
+    # merge overlapping ranges
+    merged_ranges = []
+    current_start, current_end = ranges[0]
+    for start, end in ranges[1:]:
+        if start <= current_end:
+            current_end = max(current_end, end)
+        else:
+            merged_ranges.append((current_start, current_end))
+            current_start, current_end = start, end
+    merged_ranges.append((current_start, current_end))
+
+    # create a list to hold the parts of the message
+    parts = []
+    previous_end = 0
+    for start, end in merged_ranges:
+        if start != previous_end:
+            parts.append(test_message)
+        parts.append(message[start:end])
+        previous_end = end
+
+    if previous_end != len(message):
+        parts.append(test_message)
+    
+    # join the parts into a single string
+    result = ''.join(parts)
+    
+    return result
+  
+  def _find_pattern_matches(self, message):
+
+    matches = []
+    for expression, is_regex in self.expressions:
+        if is_regex:
+            pattern = re.compile(expression)
+            for match in pattern.finditer(message):
+                matches.append((match.start(), match.end()))
+        else:
+            start = 0
+            while start >= 0:
+                start = message.find(expression, start)
+                if start >= 0:
+                    end = start + len(expression)
+                    matches.append((start, end))
+                    start = end
+
+    return matches
+    
 
 
 

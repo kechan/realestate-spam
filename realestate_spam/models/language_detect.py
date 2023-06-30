@@ -39,6 +39,8 @@ class EfficientLanguageDetector:
     if use_gcld3:
       self.gcld3_identifier = None # lazy load this
 
+    print('EfficientLanguageDetector initiated')
+
   def detect(self, message, verbose=False):
     # check if message is empty or just spaces
     if message is None or len(message.strip()) == 0:
