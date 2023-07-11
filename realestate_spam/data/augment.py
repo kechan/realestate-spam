@@ -445,6 +445,7 @@ class AugmentedDataGenerator:
 
     # train_df (after split)    
     self.train_df = train_df.copy()
+    self.incl_contact_struct_info = 'CONTACT_STRUCT_INFO' in self.train_df.columns 
 
     # find all external_data_df source note (NOTE) thats a substring in at least one of train_df.NOTE
     # Skip if external_data_df does not have source (NOTE),
@@ -514,21 +515,30 @@ class TestAugmentedDataGenerator(AugmentedDataGenerator):
       contact_struct_infos.append(contact_struct_info)
       touch_entry_ids.append(-np.random.randint(0, 1000000))
 
-    aug_test_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
-                                    'SOURCE_NOTE': source_notes, 
-                                    'NOTE': notes, 
-                                    'DISPLAY_NAME': display_names, 
-                                    'CONTACT_STRUCT_INFO': contact_struct_infos, 
-                                    'class_label': 'TEST'})
-  
+    if self.incl_contact_struct_info:
+      aug_test_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
+                                      'SOURCE_NOTE': source_notes, 
+                                      'NOTE': notes, 
+                                      'DISPLAY_NAME': display_names, 
+                                      'CONTACT_STRUCT_INFO': contact_struct_infos, 
+                                      'class_label': 'TEST'})
+    else:
+      aug_test_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
+                                      'SOURCE_NOTE': source_notes, 
+                                      'NOTE': notes, 
+                                      'DISPLAY_NAME': display_names, 
+                                      'class_label': 'TEST'})
   
     return aug_test_df
   
   def generate_new_message(self):
     # randomly pick a source message and DISPLAY_NAME from train_df that's of label == 'TEST'
     source_message = self.train_df.q("class_label == 'TEST'").sample(1).NOTE.values[0]
-
-    display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    
+    if self.incl_contact_struct_info:
+      display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    else:
+      display_name = self.train_df.sample(1)[['DISPLAY_NAME']].values[0][0]
 
     matches = self._find_pattern_matches(source_message)
 
@@ -541,13 +551,19 @@ class TestAugmentedDataGenerator(AugmentedDataGenerator):
     sep_c2 = ' ' if np.random.rand() > 0.5 else '\n'
     
     try:
-      new_message = self._replace_with_message(source_message, matches, sep_c1 + augmented_message + sep_c2)
+      if len(matches) == 0:
+        new_message = augmented_message
+      else:
+        new_message = self._replace_with_message(source_message, matches, sep_c1 + augmented_message + sep_c2)
     except Exception as e:
       print(source_message, matches, augmented_message)
       print(f"Exception: {e}")
       raise e
-
-    return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    
+    if self.incl_contact_struct_info:
+      return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    else:
+      return source_message, new_message, display_name, None, matches, augmented_message
   
   def _replace_with_message(self, message, ranges, test_message):
     # sort ranges by start position
@@ -615,12 +631,19 @@ class KvCoreAugmentedDataGenerator(AugmentedDataGenerator):
       contact_struct_infos.append(contact_struct_info)
       touch_entry_ids.append(-np.random.randint(0, 1000000))
 
-    aug_kvcore_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
-                                        'SOURCE_NOTE': source_notes,
-                                        'NOTE': notes, 
-                                        'DISPLAY_NAME': display_names, 
-                                        'CONTACT_STRUCT_INFO': contact_struct_infos, 
-                                        'class_label': 'NOT_SPAM'})    # all kvcore messages are not spam
+    if self.incl_contact_struct_info:
+      aug_kvcore_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
+                                          'SOURCE_NOTE': source_notes,
+                                          'NOTE': notes, 
+                                          'DISPLAY_NAME': display_names, 
+                                          'CONTACT_STRUCT_INFO': contact_struct_infos, 
+                                          'class_label': 'NOT_SPAM'})    # all kvcore messages are not spam
+    else:
+      aug_kvcore_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
+                                          'SOURCE_NOTE': source_notes,
+                                          'NOTE': notes, 
+                                          'DISPLAY_NAME': display_names, 
+                                          'class_label': 'NOT_SPAM'})
     
     return aug_kvcore_df
   
@@ -628,12 +651,18 @@ class KvCoreAugmentedDataGenerator(AugmentedDataGenerator):
     # randomly pick a source message and DISPLAY_NAME from train_df that's starts with 'kvCore found'
     sample_external_data_df = self.external_data_df.sample(1)
 
-    display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]   # use all names possible
+    if self.incl_contact_struct_info:
+      display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]   # use all names possible
+    else:
+      display_name = self.train_df.sample(1)[['DISPLAY_NAME']].values[0][0]   
 
     source_message = sample_external_data_df.NOTE.values[0]
     augmented_message = sample_external_data_df.NOTE_AUG.values[0]
 
-    return source_message, augmented_message, display_name, contact_struct_info
+    if self.incl_contact_struct_info:
+      return source_message, augmented_message, display_name, contact_struct_info
+    else:
+      return source_message, augmented_message, display_name, None
 
   
 class KaggleToxicAugmentedDataGenerator(AugmentedDataGenerator):
@@ -680,12 +709,19 @@ class KaggleToxicAugmentedDataGenerator(AugmentedDataGenerator):
       contact_struct_infos.append(contact_struct_info)
       touch_entry_ids.append(-np.random.randint(0, 1000000))
 
-    aug_kaggle_toxic_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
-                                        'SOURCE_NOTE': source_notes,
-                                        'NOTE': notes,
-                                        'DISPLAY_NAME': display_names,
-                                        'CONTACT_STRUCT_INFO': contact_struct_infos,
-                                        'class_label': 'SPAM'})    # all toxic messages are SPAM
+    if self.incl_contact_struct_info:
+      aug_kaggle_toxic_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
+                                          'SOURCE_NOTE': source_notes,
+                                          'NOTE': notes,
+                                          'DISPLAY_NAME': display_names,
+                                          'CONTACT_STRUCT_INFO': contact_struct_infos,
+                                          'class_label': 'SPAM'})    # all toxic messages are SPAM
+    else:
+      aug_kaggle_toxic_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids,
+                                          'SOURCE_NOTE': source_notes,
+                                          'NOTE': notes,
+                                          'DISPLAY_NAME': display_names,
+                                          'class_label': 'SPAM'})
     
     return aug_kaggle_toxic_df
   
@@ -693,7 +729,10 @@ class KaggleToxicAugmentedDataGenerator(AugmentedDataGenerator):
     # randomly independently sample a source message and DISPLAY_NAME from train_df 
 
     source_message = self.train_df.sample(1).NOTE.values[0]
-    display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    if self.incl_contact_struct_info:
+      display_name, contact_struct_info = self.train_df.sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    else:
+      display_name = self.train_df.sample(1)[['DISPLAY_NAME']].values[0][0]
 
     matches = self._find_pattern_matches(source_message)   # identify common sys generated pattern pecurliar to first touch entry NOTE
 
@@ -711,7 +750,10 @@ class KaggleToxicAugmentedDataGenerator(AugmentedDataGenerator):
       print(f"Exception: {e}")
       raise e
     
-    return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    if self.incl_contact_struct_info:
+      return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    else:
+      return source_message, new_message, display_name, None, matches, augmented_message
   
   def _replace_with_message(self, message, ranges, test_message):
     # if range is empty, return the text_message 
@@ -802,31 +844,42 @@ class ChineseAugmentedDataGenerator(AugmentedDataGenerator):
     ]
 
 
-  def generate_aug_df(self, n, label):
+  def generate_aug_df(self, n, label, chinese_display_names=None):
     touch_entry_ids, source_notes, notes, display_names, contact_struct_infos = [], [], [], [], []
     query = f'class_label == "{label}"'
     for i in tqdm(range(n)):
-      source_message, new_message, display_name, contact_struct_info, matches, chatgpt_augmented_mesg = self.generate_new_message(query=query)
+      source_message, new_message, display_name, contact_struct_info, matches, chatgpt_augmented_mesg = self.generate_new_message(query=query, chinese_display_names=chinese_display_names)
       source_notes.append(source_message)
       notes.append(new_message)
       display_names.append(display_name)
       contact_struct_infos.append(contact_struct_info)
       touch_entry_ids.append(-np.random.randint(0, 1000000))
 
-    aug_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
-                                    'SOURCE_NOTE': source_notes, 
-                                    'NOTE': notes, 
-                                    'DISPLAY_NAME': display_names, 
-                                    'CONTACT_STRUCT_INFO': contact_struct_infos, 
-                                    'class_label': label})
+    if self.incl_contact_struct_info:
+      aug_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
+                                      'SOURCE_NOTE': source_notes, 
+                                      'NOTE': notes, 
+                                      'DISPLAY_NAME': display_names, 
+                                      'CONTACT_STRUCT_INFO': contact_struct_infos, 
+                                      'class_label': label})
+    else:
+      aug_df = pd.DataFrame(data={'TOUCH_ENTRY_ID': touch_entry_ids, 
+                                      'SOURCE_NOTE': source_notes, 
+                                      'NOTE': notes, 
+                                      'DISPLAY_NAME': display_names, 
+                                      'class_label': label})
   
     return aug_df
   
-  def generate_new_message(self, query):
+  def generate_new_message(self, query, chinese_display_names=None):
     source_message = self.train_df.q(query).sample(1).NOTE.values[0]
 
     # sample a chinese names
-    display_name, contact_struct_info = self.train_df.q(f"lang == 'zh'").sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    if self.incl_contact_struct_info and 'lang' in self.train_df.columns:
+      display_name, contact_struct_info = self.train_df.q(f"lang == 'zh'").sample(1)[['DISPLAY_NAME', 'CONTACT_STRUCT_INFO']].values[0]
+    elif chinese_display_names is not None:
+      # sample a display_name from the list chinese_display_names
+      display_name = np.random.choice(chinese_display_names)
 
     matches = self._find_pattern_matches(source_message)
 
@@ -848,7 +901,10 @@ class ChineseAugmentedDataGenerator(AugmentedDataGenerator):
       print(f"Exception: {e}")
       raise e
 
-    return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    if self.incl_contact_struct_info:
+      return source_message, new_message, display_name, contact_struct_info, matches, augmented_message
+    else:
+      return source_message, new_message, display_name, None, matches, augmented_message
   
   def _replace_with_message(self, message, ranges, test_message):
     # sort ranges by start position

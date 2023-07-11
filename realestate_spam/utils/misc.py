@@ -25,8 +25,17 @@ def flatten_list(tuples_list: List[Tuple[List, List]]) -> List:
   flattened_list = list(chain.from_iterable(chain(*tuples_list)))
   return flattened_list
 
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
+def num_tokens_from_string(string: str, encoding_name='cl100k_base') -> int:
   """Returns the number of tokens in a text string."""
   encoding = tiktoken.get_encoding(encoding_name)
   num_tokens = len(encoding.encode(string))
   return num_tokens
+
+def truncate_string(string: str, encoding_name='cl100k_base', n_token=50):
+  """ Truncates a string to n_token """
+ 
+  encoding = tiktoken.get_encoding(encoding_name)
+  tokens = encoding.encode(string)
+  truncated_tokens = tokens[:n_token]
+  truncated_string = encoding.decode(truncated_tokens)
+  return truncated_string

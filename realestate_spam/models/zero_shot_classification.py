@@ -37,7 +37,7 @@ class ZeroShotClassificationModel:
       self.empty_cache_func = lambda: None
 
   def __call__(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True, verbose=False) -> pd.DataFrame:
-    optional_tqdm = lambda x, verbose=False: tqdm(x) if verbose else x
+    optional_tqdm = lambda x: tqdm(x) if verbose else x
 
     if isinstance(messages, str): messages = [messages]
 

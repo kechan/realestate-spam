@@ -79,6 +79,7 @@ class DataDistiller:
       distilled_indices.append([nearest_nn_idx, furthest_nn_idx])
 
     # flatten the list and obtain the selected rows from self.df  
+    print(flatten_list(distilled_indices))
     distilled_df = self.df.loc[flatten_list(distilled_indices)]
     print(f"dup in distill_df: {distilled_df.duplicated(subset='NOTE').sum()}")
 

@@ -49,7 +49,7 @@ class EfficientLanguageDetector:
     result = self.light_detect(message)
 
     if result['prob'] < 0.95:
-      # lazy load the model
+      # lazy load the bigger heavier model
       if self.lang_detect_model is None: self.lang_detect_model = LanguageDetector(device=self.device)
 
       result = self.lang_detect_model.detect([message], batch_size=1, verbose=verbose).iloc[0]
