@@ -1,6 +1,6 @@
 from typing import List
 
-from cld2 import detect as cld2_detect
+
 import langdetect
 from langdetect import detect_langs
 
@@ -11,6 +11,11 @@ from torch import mps
 
 import pandas as pd
 from tqdm.auto import tqdm
+
+try:
+  from cld2 import detect as cld2_detect
+except:
+  print('unable to import cld2')
 
 try:
   import cld3
@@ -38,6 +43,12 @@ class EfficientLanguageDetector:
     self.lang_detect_model = None  # lazy load this
     if use_gcld3:
       self.gcld3_identifier = None # lazy load this
+
+    try:
+      cld2_detect('dummy')
+      self.mixed_encoding_checking = True
+    except:
+      self.mixed_encoding_checking = False    # Was unable to import cld2, skipped checking for mixed encoding
 
     print('EfficientLanguageDetector initiated')
 
@@ -70,12 +81,14 @@ class EfficientLanguageDetector:
           result = cld3.get_language(message)
         # a hack, use cld2 to trigger an exception in order to detect mixed/wrong encoding
         # cld3 is susceptible to wrong prediction in windows related encoded as utf-8
-        cld2_detect(message)
+        if self.mixed_encoding_checking:
+          cld2_detect(message)
 
         if result is not None and result.is_reliable:
           return {'message': message, 'lang': result.language, 'prob': result.probability}
         else:
           result = self._try_lang_detect(message)
+
       except (TypeError, ValueError, UnicodeDecodeError) as e:
         result = self._try_lang_detect(message)
     
