@@ -10,7 +10,14 @@ class InteractiveScatter:
   A class for creating interactive scatter plot using plotly
   dataframe must have column named 'tsne' which contains the tsne coordinates
   """
-  def __init__(self, df: pd.DataFrame, class_label_colname='class_label', class_labels: List[str]=[], color_map: Dict[str, str]=[]):
+  def __init__(self, 
+               df: pd.DataFrame, 
+               vector_colname='reduced_NOTE_VECTOR',
+               class_label_colname='class_label', 
+               class_labels: List[str]=[], 
+               color_map: Dict[str, str]=[]):
+    
+    self.vector_colname = vector_colname
     self.class_label_colname = class_label_colname
     self.class_labels = class_labels
     self.color_map = color_map
@@ -19,7 +26,7 @@ class InteractiveScatter:
     # defrag the index
     self.df.defrag_index(inplace=True)
 
-  def render_figure(self, width=1500, height=1500, opacity=0.2, size=4) -> go.Figure:
+  def render(self, title='', width=1500, height=1500, opacity=0.2, size=4) -> go.Figure:
     """
     return plotly.graph_objs figure object
     such that you can plot this with 
@@ -27,16 +34,19 @@ class InteractiveScatter:
     pyo.iplot(fig)  
     """
 
-    assert 'tsne' in self.df.columns, 'tsne column must be present in dataframe'
+    assert self.vector_colname in self.df.columns, f'{self.vector_colname} column must be present in dataframe'
     # obtain tsne as a ndarray 
-    tsne = np.array(self.df.tsne.values.tolist())
+    data = np.array(self.df[self.vector_colname].values.tolist())
 
     self.traces = []
     for label in self.class_labels:
       indices = self.df.q(f"{self.class_label_colname} == @label").index
 
-      trace = go.Scatter(x=tsne[indices, 0], 
-                        y=tsne[indices, 1], 
+      # hovertext = self.df.loc[indices].NOTE.values.tolist()
+      hovertext = (self.df.loc[indices].TOUCH_ENTRY_ID.astype(str) + ': ' + self.df.loc[indices].NOTE).values.tolist()
+
+      trace = go.Scatter(x=data[indices, 0], 
+                        y=data[indices, 1], 
                         mode='markers', 
                         marker=dict(
                             size=size, 
@@ -45,7 +55,7 @@ class InteractiveScatter:
                             # colorscale='Viridis',
                             # colorbar=dict(title='Class')
                         ),
-                        hovertext=self.df.loc[indices].NOTE.values.tolist(),
+                        hovertext=hovertext,
                         showlegend=True,
                         name=label,
                         )
@@ -53,7 +63,7 @@ class InteractiveScatter:
 
     # create a layout for the plot
     self.layout = go.Layout(
-      title='Note Clustering',
+      title=title,
       hovermode='closest', # show information on hover
       width=width,
       height=height,
@@ -94,5 +104,29 @@ class InteractiveScatter:
 
     return fig
 
+  def add_selected_points(self, points: np.ndarray) -> go.Figure:
+    points_x = points[:, 0]
+    points_y = points[:, 1]
+
+    # Create a trace for the points
+    points_trace = go.Scatter(x=points_x,
+                              y=points_y,
+                              mode='markers',
+                              marker=dict(
+                                  size=4,  # Adjust size as needed
+                                  color='rgb(0, 0, 0)',  # black
+                                  symbol = 'diamond',
+                                  opacity=1.0
+                              ),
+                              showlegend=True,
+                              name='Selected Points',
+                              )
+    # Add the points trace to your traces
+    self.traces.append(points_trace)
+
+    fig = go.Figure(data=self.traces, layout=self.layout)
+
+    return fig 
+                            
 
   

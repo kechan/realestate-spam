@@ -100,7 +100,7 @@ class EditableDataFrame:
                 disabled=disabled)
     
   def _make_html(self, value):
-    return HTML(value= '<style>p{word-wrap: break-word}</style> <p>'+ value +' </p>', layout=Layout(width=self.long_text_width))
+    return HTML(value= '<style>p{word-wrap: break-word}</style> <p>'+ str(value) +' </p>', layout=Layout(width=self.long_text_width))
 
   def _make_label(self, value):
     return Label(value=str(value), layout=Layout(width='auto'))
