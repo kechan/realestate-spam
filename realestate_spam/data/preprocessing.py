@@ -1,5 +1,11 @@
+from typing import Any, List, Dict, Tuple, Union
+
 import re
 import pandas as pd
+
+from abc import ABC, abstractmethod
+
+from ..utils.misc import html_unescape
 
 def coalesce_contact_cols(row):
   """
@@ -191,4 +197,93 @@ def keep_user_input_str_only(note: str) -> str:
 
     return note
 
+class BalancedSampler:
+  def __init__(self, df, groupname, N, random_state=None):
+    self.df = df
+    self.groupname = groupname
+    self.samples_per_category = N // len(df[groupname].unique())
+    self.random_state = random_state
+    self.balanced_df = self.create_balanced_df().sample(frac=1, random_state=self.random_state).reset_index(drop=True)
 
+  def sample_func(self, group):
+    unique_entries = group.drop_duplicates()
+    if len(unique_entries) >= self.samples_per_category:
+      return unique_entries.sample(self.samples_per_category, replace=False, random_state=self.random_state)
+    else:
+      additional_samples_needed = self.samples_per_category - len(unique_entries)
+      additional_samples = group.sample(additional_samples_needed, replace=True, random_state=self.random_state)
+      return pd.concat([unique_entries, additional_samples])
+
+  def create_balanced_df(self):
+    return self.df.groupby(self.groupname, group_keys=False).apply(self.sample_func)
+
+  def generate_samples(self, colname=None):
+    if colname:
+      for value in self.balanced_df[colname]:
+        yield value
+    else:
+      for row in self.balanced_df.itertuples(index=False):
+        yield row
+
+class PreprocessingPipeline(ABC):
+  def __init__(self, df):
+    self.df = df.copy()
+    self.orig_df = df    # do not modify the original df
+
+    assert 'DISPLAY_NAME' in self.df.columns, 'DISPLAY_NAME column must be present in the dataframe'
+    assert 'NOTE' in self.df.columns, 'NOTE column must be present in the dataframe'
+    assert self.df is not None, 'df must be provided'
+    assert isinstance(self.df, pd.DataFrame), 'df must be a pandas dataframe'
+
+  @abstractmethod
+  def run(self):
+    pass
+
+  def __call__(self):
+    return self.run()
+  
+class DistilledDataPipeline(PreprocessingPipeline):
+  '''
+  A preprocessing pipeline for distilled form of data.
+  '''
+  def __init__(self, df):
+    super().__init__(df)
+    self.class_id_to_name = {0: 'NOT_SPAM', 1: 'SPAM', 2: 'TEST'}
+    self.name_to_class_id = {v: k for k, v in self.class_id_to_name.items()}
+
+  def run(self):
+    self.df.DISPLAY_NAME.fillna('n/a', inplace=True)
+    self.df.NOTE.fillna('n/a', inplace=True)
+
+    html_unescape(self.df)
+    self.generate_text()
+    self.add_label()
+
+    self.sanity_check()
+
+    return self.df
+
+
+  def generate_text(self, note: str = None, display_name: str = None) -> Union[None, str]:    # the X in training
+    '''
+    text should be DISPLAY_NAME is <display_name>; <note>
+    '''
+    if note is not None and display_name is not None:
+      return self._generate_text(note, display_name)     # working at str -> str level
+    
+    self.df['text'] = 'DISPLAY_NAME is ' + self.df.DISPLAY_NAME + '; ' + self.df.NOTE
+ 
+  def add_label(self):
+    '''
+    this is an id, and we will use name_to_class_id
+    '''
+    self.df['label'] = self.df.class_label.apply(lambda x: self.name_to_class_id[x])
+    
+  def sanity_check(self):
+    assert self.df.text.isnull().sum() == 0, 'text column cannot have null values'
+    assert self.df.label.isnull().sum() == 0, 'label column cannot have null values'
+
+    assert self.df.shape[0] == self.orig_df.shape[0], 'df should not have dropped any rows'
+
+  def _generate_text(self, note: str, display_name: str) -> str:
+    return 'DISPLAY_NAME is ' + display_name + '; ' + note

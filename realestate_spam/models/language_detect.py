@@ -35,7 +35,12 @@ class EfficientLanguageDetector:
     trying to use 'papluca/xlm-roberta-base-language-detection' which is more accurate but resource intensive
   """
   
-  def __init__(self, try_langdetect_only=False, use_gcld3=True, device=torch.device('cpu')):
+  def __init__(self, 
+               model_name='papluca/xlm-roberta-base-language-detection', 
+               try_langdetect_only=False, 
+               use_gcld3=True, 
+               device=torch.device('cpu')):
+    self.model_name = model_name
     self.try_langdetect_only = try_langdetect_only
     self.use_gcld3 = use_gcld3
     self.device = device
@@ -61,7 +66,7 @@ class EfficientLanguageDetector:
 
     if result['prob'] < 0.95:
       # lazy load the bigger heavier model
-      if self.lang_detect_model is None: self.lang_detect_model = LanguageDetector(device=self.device)
+      if self.lang_detect_model is None: self.lang_detect_model = LanguageDetector(model_name=self.model_name, device=self.device)
 
       result = self.lang_detect_model.detect([message], batch_size=1, verbose=verbose).iloc[0]
       result = {'message': result['message'], 'lang': result['lang'], 'prob': float(result['prob'])}

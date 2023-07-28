@@ -11,8 +11,8 @@ class EditableDataFrame:
       display_cols = list(self.df.columns[:5])
 
     assert len(editable_cols) <= 1, 'Only 1 editable col is supported for now'  # TODO: support multiple editable cols
-    assert len(longtext_cols) <= 1, 'Only 1 longtext col is supported for now'  # TODO: support multiple longtext cols
-    assert len(html_cols) <= 1, 'Only 1 html col is supported for now'  # TODO: support multiple html cols
+    # assert len(longtext_cols) <= 1, 'Only 1 longtext col is supported for now'  # TODO: support multiple longtext cols
+    # assert len(html_cols) <= 1, 'Only 1 html col is supported for now'  # TODO: support multiple html cols
 
     self.display_cols = display_cols
     self.editable_cols = editable_cols
@@ -69,12 +69,20 @@ class EditableDataFrame:
     if self._display_df is None:
       self.indices = self.df.index    # all of them
     
-    if len(self.longtext_cols) > 0:
-      longtext_col = self.longtext_cols[0]
-    else:
-      longtext_col = 'dfglhsdf@#$'
+    # if len(self.longtext_cols) > 0:
+    #   longtext_col = self.longtext_cols[0]
+    # else:
+    #   longtext_col = 'dfglhsdf@#$'
 
-    header = HBox([self._make_textbox(c, disabled=True, layout=Layout(width=self.long_text_width) if c == longtext_col else Layout(width='auto')) for c in ['index'] + list(self._display_df.columns)])
+    # header = HBox([self._make_textbox(c, disabled=True, layout=Layout(width=self.long_text_width) if c == longtext_col else Layout(width='auto')) for c in ['index'] + list(self._display_df.columns)])
+    header = []
+    for c in ['index'] + list(self._display_df.columns):
+      if c in self.longtext_cols:
+          header.append(self._make_textbox(c, disabled=True, layout=Layout(width=self.long_text_width)))
+      else:
+          header.append(self._make_textbox(c, disabled=True, layout=Layout(width='auto')))
+
+    header = HBox(header)
 
     if self.n_row_per_page is not None:
       rows = [self._make_row(index, row) for index, row in self._display_df.iloc[self.current_idx: self.current_idx+self.n_row_per_page].iterrows()]
@@ -113,7 +121,18 @@ class EditableDataFrame:
 
     row_widgets = []
     row_widgets.append(self._make_textbox(index, disabled=True))
-    row_widgets += [self._make_textbox(row[c], disabled=(True if c != editable_col else False)) if c != html_col else self._make_html(row[c]) for c in self._display_df.columns]
+    # row_widgets += [self._make_textbox(row[c], disabled=(True if c != editable_col else False)) if c != html_col else self._make_html(row[c]) for c in self._display_df.columns]
+
+    for c in self._display_df.columns:
+      if c in self.html_cols:
+        widget = self._make_html(row[c])
+      elif c in self.longtext_cols:
+        widget = self._make_html(row[c])
+      elif c in self.editable_cols:
+        widget = self._make_textbox(row[c], disabled=False)
+      else:
+        widget = self._make_textbox(row[c], disabled=True)
+      row_widgets.append(widget)
 
     for widget, column in zip(row_widgets, ['index'] + list(self._display_df.columns)):
       def save_value(change, column=column, row=row):
