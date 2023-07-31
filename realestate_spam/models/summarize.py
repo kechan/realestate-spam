@@ -11,7 +11,7 @@ class SummarizationModel:
   def get_model_names():
     return ['t5-small', 't5-base', 't5-large', 't5-3b']
 
-  def __init__(self, model_name='t5-large', device=torch.device('cpu')):
+  def __init__(self, model_name='t5-base', device=torch.device('cpu')):
     self.model_name = model_name
     self.device = device
 
@@ -27,7 +27,7 @@ class SummarizationModel:
     elif 'summarizer' in model_name.lower():
       self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
       self.tokenizer = AutoTokenizer.from_pretrained(model_name, return_dict=True)
-      
+
     else:
       assert 'Not implemented yet, more will come soon!'
 
