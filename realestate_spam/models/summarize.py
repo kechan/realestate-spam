@@ -15,12 +15,19 @@ class SummarizationModel:
     self.model_name = model_name
     self.device = device
 
-    assert any([model_name.lower() in m.lower() for m in SummarizationModel.get_model_names()]), f'{model_name} not supported yet'
+    # TODO: don't use assert on the model names, since these can be arbitrary paths (when using a local model), fix this later.
+    # assert any([model_name.lower() in m.lower() for m in SummarizationModel.get_model_names()]), f'{model_name} not supported yet'
 
     if 't5' in model_name.lower():
       self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
       # self.tokenizer = T5Tokenizer.from_pretrained(model_name, return_dict=True)
       self.tokenizer = AutoTokenizer.from_pretrained(model_name, return_dict=True)
+
+    # Workaround: the model name could be an arbitrary local path, if saved locally
+    elif 'summarizer' in model_name.lower():
+      self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
+      self.tokenizer = AutoTokenizer.from_pretrained(model_name, return_dict=True)
+      
     else:
       assert 'Not implemented yet, more will come soon!'
 
