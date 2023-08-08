@@ -197,6 +197,42 @@ def keep_user_input_str_only(note: str) -> str:
 
     return note
 
+def cleanup_spaces_colons(note: Union[pd.DataFrame, str]) -> Union[None, str]:
+  remove_colons = lambda x: re.sub(r':', '', x)
+  remove_nbsp = lambda x: re.sub(r'&nbsp;', ' ', x)
+  remove_multispaces = lambda x: re.sub(r'\s+', ' ', x) 
+  strip_str = lambda x: x.strip()
+
+  if isinstance(note, pd.DataFrame): 
+    df = note 
+    assert 'NOTE' in df.columns, 'NOTE column must be present in the dataframe'
+    df.NOTE = df.NOTE.apply(remove_colons)
+    df.NOTE = df.NOTE.apply(remove_nbsp)
+    df.NOTE = df.NOTE.apply(remove_multispaces)
+    df.NOTE = df.NOTE.apply(strip_str)
+    # no need to return, df is passed by reference
+  elif isinstance(note, str):
+    note = remove_colons(note)
+    note = remove_nbsp(note)
+    note = remove_multispaces(note)
+    note = strip_str(note)
+
+    return note
+
+# for preparing dataset with 'text' and 'label' as standard columns for training
+def generate_text(df: pd.DataFrame = None, note: str = None, display_name: str = None) -> Any:    # the X in training
+  if df is not None and isinstance(df, pd.DataFrame):
+    df['text'] = 'DISPLAY_NAME is ' + df.DISPLAY_NAME + '; ' + df.NOTE
+  elif note is not None and display_name is not None:
+    return 'DISPLAY_NAME is ' + display_name + '; ' + note
+
+def add_label(df: pd.DataFrame, name_to_class_id: dict):
+  '''
+  this is an id, and we will use name_to_class_id
+  '''
+  assert 'class_label' in df.columns, 'class_label column must be present in the dataframe'
+  df['label'] = df.class_label.apply(lambda x: name_to_class_id[x])
+
 class BalancedSampler:
   def __init__(self, df, groupname, N, random_state=None):
     self.df = df

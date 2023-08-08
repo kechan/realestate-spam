@@ -36,7 +36,7 @@ class ZeroShotClassificationModel:
     else:
       self.empty_cache_func = lambda: None
 
-  def __call__(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True, verbose=False) -> pd.DataFrame:
+  def __call__(self, messages: List[str], batch_size=128, html_unescape=True, return_df=True, aggressive_clear_cache=False, verbose=False) -> pd.DataFrame:
     optional_tqdm = lambda x: tqdm(x) if verbose else x
 
     if isinstance(messages, str): messages = [messages]
@@ -62,6 +62,9 @@ class ZeroShotClassificationModel:
           prob = logits[:, [0, 2]].softmax(dim=1)[:,1].cpu().numpy()
 
         probs[class_name].extend(prob.tolist())
+        if aggressive_clear_cache:
+          gc.collect()
+          self.empty_cache_func()
 
       gc.collect()
       self.empty_cache_func()
