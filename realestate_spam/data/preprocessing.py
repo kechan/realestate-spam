@@ -5,7 +5,7 @@ import pandas as pd
 
 from abc import ABC, abstractmethod
 
-from ..utils.misc import html_unescape
+from ..utils.misc import html_unescape, truncate_string
 
 def coalesce_contact_cols(row):
   """
@@ -272,8 +272,8 @@ class PreprocessingPipeline(ABC):
     assert isinstance(self.df, pd.DataFrame), 'df must be a pandas dataframe'
 
   @abstractmethod
-  def run(self):
-    pass
+  def run(self) -> pd.DataFrame:
+    raise NotImplementedError
 
   def __call__(self):
     return self.run()
@@ -287,11 +287,20 @@ class DistilledDataPipeline(PreprocessingPipeline):
     self.class_id_to_name = {0: 'NOT_SPAM', 1: 'SPAM', 2: 'TEST'}
     self.name_to_class_id = {v: k for k, v in self.class_id_to_name.items()}
 
-  def run(self):
+  def run(self, truncate_len=-1) -> pd.DataFrame:
+    '''
+    if truncate_len is -1, don't truncate, otherwise, truncate this number of tokens from NOTE
+    '''
+
+    keep_user_input_only(self.df)
+
     self.df.DISPLAY_NAME.fillna('n/a', inplace=True)
     self.df.NOTE.fillna('n/a', inplace=True)
 
     html_unescape(self.df)
+    if truncate_len != -1 and truncate_len > 0:
+      self.df.NOTE = self.df.NOTE.apply(lambda x: truncate_string(x, n_token=truncate_len))
+
     self.generate_text()
     self.add_label()
 
@@ -302,7 +311,7 @@ class DistilledDataPipeline(PreprocessingPipeline):
 
   def generate_text(self, note: str = None, display_name: str = None) -> Union[None, str]:    # the X in training
     '''
-    text should be DISPLAY_NAME is <display_name>; <note>
+    text should be "DISPLAY_NAME is <display_name>; <note>"
     '''
     if note is not None and display_name is not None:
       return self._generate_text(note, display_name)     # working at str -> str level
@@ -312,12 +321,16 @@ class DistilledDataPipeline(PreprocessingPipeline):
   def add_label(self):
     '''
     this is an id, and we will use name_to_class_id
+    just do nothing is class_label is missing
     '''
-    self.df['label'] = self.df.class_label.apply(lambda x: self.name_to_class_id[x])
+    if 'class_label' in self.df.columns:
+      self.df['label'] = self.df.class_label.apply(lambda x: self.name_to_class_id[x])
     
   def sanity_check(self):
     assert self.df.text.isnull().sum() == 0, 'text column cannot have null values'
-    assert self.df.label.isnull().sum() == 0, 'label column cannot have null values'
+
+    if 'class_label' in self.df.columns:
+      assert self.df.label.isnull().sum() == 0, 'label column cannot have null values'
 
     assert self.df.shape[0] == self.orig_df.shape[0], 'df should not have dropped any rows'
 

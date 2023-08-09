@@ -88,12 +88,13 @@ class KMeansSamplingDataDistiller(DataDistiller):
     self.centroids = kmeans.cluster_centers_
 
 
-  def distill(self, n_nearest=3, n_furthest=5, random_state=42) -> List[Tuple[List, List]]:
+  def distill(self, n_nearest=3, n_furthest=5, random_state=42) -> pd.DataFrame:
     if f'reduced_{self.embedding_col}' not in self.df.columns:
-      print(f'reduce_{self.embedding_col} column not found, generating them first...')
+      print(f'reduce_{self.embedding_col} column not found, generating them ...')
       self.dim_reduce(random_state=random_state)
     
-    assert not (not hasattr(self, 'labels') or self.labels is None), print('cluster labels not found, run .generate_clusters(...) first')
+    if (not hasattr(self, 'labels') or self.labels is None):   # no cluster labels found
+      print('cluster labels not found, running generate_clusters(...)')
 
     reduced_embeddings = np.array(self.df[f'reduce_{self.embedding_col}'].values.tolist())
 
@@ -180,7 +181,7 @@ class UniformGridSamplingDataDistiller(DataDistiller):
   def generate_clusters(self, n_clusters=10, **kwargs):
     raise NotImplementedError
   
-  def distill(self, N: int, M: int) -> pd.DataFrame:
+  def sample(self, N: int, M: int) -> pd.DataFrame:
     """
     Sampling method:
     1. divide the 2d space into N x N grid
@@ -226,7 +227,19 @@ class UniformGridSamplingDataDistiller(DataDistiller):
 
     return distilled_df
 
+  def distill(self, dim: int = 2, random_state=42, n_jobs=-1) -> pd.DataFrame:
+    # Step 1: Dimensionality reduction
+    self.dim_reduce(dim=dim, random_state=random_state, n_jobs=n_jobs)
 
+    # Step 2: Sampling
+    # First, we define the grid size and number to be sampled per cell
+    N = int(np.sqrt(self.df.shape[0])/2.)  # Choose a size s.t. a cell contains on avg 4 data samples
+    M = 4     # Number of samples per cell
+
+    distilled_df = self.sample(N=N, M=M)
+    distilled_df = distilled_df.sample(frac=1., random_state=random_state).defrag_index()
+
+    return distilled_df
 
 
 
