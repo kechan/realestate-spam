@@ -198,6 +198,10 @@ def keep_user_input_str_only(note: str) -> str:
     return note
 
 def cleanup_spaces_colons(note: Union[pd.DataFrame, str]) -> Union[None, str]:
+  """
+  Replace spaces r'\s+' with a single space ' ' and remove colons ':'
+  works with both a dataframe and a string. For string, it will return the processed string.
+  """
   remove_colons = lambda x: re.sub(r':', '', x)
   remove_nbsp = lambda x: re.sub(r'&nbsp;', ' ', x)
   remove_multispaces = lambda x: re.sub(r'\s+', ' ', x) 
@@ -262,9 +266,10 @@ class BalancedSampler:
         yield row
 
 class PreprocessingPipeline(ABC):
-  def __init__(self, df):
+  def __init__(self, df, training=False):
     self.df = df.copy()
     self.orig_df = df    # do not modify the original df
+    self.training = training
 
     assert 'DISPLAY_NAME' in self.df.columns, 'DISPLAY_NAME column must be present in the dataframe'
     assert 'NOTE' in self.df.columns, 'NOTE column must be present in the dataframe'
@@ -278,31 +283,79 @@ class PreprocessingPipeline(ABC):
   def __call__(self):
     return self.run()
   
-class DistilledDataPipeline(PreprocessingPipeline):
+
+class StandardDataPipeline(PreprocessingPipeline):
   '''
-  A preprocessing pipeline for distilled form of data.
+  This was the 1st data proprocessing pipeline, and also currently in deployment so far
+  TODO: Update the name
   '''
-  def __init__(self, df):
-    super().__init__(df)
-    self.class_id_to_name = {0: 'NOT_SPAM', 1: 'SPAM', 2: 'TEST'}
+  def __init__(self, df, class_id_to_name: Dict[int, str]=None, training=False):
+    super().__init__(df, training)
+    self.class_id_to_name = {0: 'NOT_SPAM', 1: 'SPAM', 2: 'TEST'} if class_id_to_name is None else class_id_to_name
+    self.name_to_class_id = {v: k for k, v in self.class_id_to_name.items()}  # reverse the mapping
+
+  def __call__(self) -> pd.DataFrame:
+    return self.run()
+
+  def run(self) -> pd.DataFrame:
+    assert 'CONTACT_STRUCT_INFO' in self.df.columns, 'CONTACT_STRUCT_INFO column must be present in the dataframe'
+    html_unescape(self.df)
+    self.generate_text()
+    if self.training: 
+      self.add_label()
+
+    return self.df
+  
+  def generate_text(self):
+    self.df['text'] = self.df.CONTACT_STRUCT_INFO + '|' + self.df.NOTE
+
+  def add_label(self):
+    '''
+    this is an id, and we will use name_to_class_id
+    just do nothing is class_label is missing
+    '''
+    if 'class_label' in self.df.columns:
+      self.df['label'] = self.df.class_label.apply(lambda x: self.name_to_class_id[x])
+
+
+
+class CleanseSimpleDisplayNameDataPipeline(PreprocessingPipeline):
+  '''
+  html_unscape -> keep_user_input_only -> cleanup_spaces_colons -> generate_text
+  with text in the format of "DISPLAY_NAME is <display_name>; <note>"
+  '''
+  def __init__(self, df, class_id_to_name: Dict[int, str]=None, training=False, keep_original_note=False):
+    super().__init__(df, training=training)
+    self.keep_original_note = keep_original_note
+
+    self.class_id_to_name = {0: 'NOT_SPAM', 1: 'SPAM', 2: 'TEST'} if class_id_to_name is None else class_id_to_name
+    
     self.name_to_class_id = {v: k for k, v in self.class_id_to_name.items()}
+
+  def __call__(self, truncate_len=-1) -> pd.DataFrame:
+    return self.run(truncate_len=truncate_len)
 
   def run(self, truncate_len=-1) -> pd.DataFrame:
     '''
     if truncate_len is -1, don't truncate, otherwise, truncate this number of tokens from NOTE
     '''
 
+    if self.keep_original_note:
+      self.df['NOTE_orig'] = self.df.NOTE
+
+    html_unescape(self.df)     # consulted with chatgpt and decided html.unescape should be applied first before other preprocessing
     keep_user_input_only(self.df)
+    cleanup_spaces_colons(self.df)
 
     self.df.DISPLAY_NAME.fillna('n/a', inplace=True)
     self.df.NOTE.fillna('n/a', inplace=True)
-
-    html_unescape(self.df)
+    
     if truncate_len != -1 and truncate_len > 0:
       self.df.NOTE = self.df.NOTE.apply(lambda x: truncate_string(x, n_token=truncate_len))
 
-    self.generate_text()
-    self.add_label()
+    self.generate_text()   # this is the X to be trained on.
+    if self.training: 
+      self.add_label()
 
     self.sanity_check()
 
@@ -316,7 +369,8 @@ class DistilledDataPipeline(PreprocessingPipeline):
     if note is not None and display_name is not None:
       return self._generate_text(note, display_name)     # working at str -> str level
     
-    self.df['text'] = 'DISPLAY_NAME is ' + self.df.DISPLAY_NAME + '; ' + self.df.NOTE
+    # self.df['text'] = 'DISPLAY_NAME is ' + self.df.DISPLAY_NAME + '; ' + self.df.NOTE
+    generate_text(df=self.df)
  
   def add_label(self):
     '''
@@ -329,10 +383,12 @@ class DistilledDataPipeline(PreprocessingPipeline):
   def sanity_check(self):
     assert self.df.text.isnull().sum() == 0, 'text column cannot have null values'
 
-    if 'class_label' in self.df.columns:
+    if self.training and 'class_label' in self.df.columns:
       assert self.df.label.isnull().sum() == 0, 'label column cannot have null values'
 
+    # it is up to the user to dedup the dataframe as necessary
     assert self.df.shape[0] == self.orig_df.shape[0], 'df should not have dropped any rows'
 
   def _generate_text(self, note: str, display_name: str) -> str:
-    return 'DISPLAY_NAME is ' + display_name + '; ' + note
+    # return 'DISPLAY_NAME is ' + display_name + '; ' + note
+    return generate_text(note=note, display_name=display_name)

@@ -1,7 +1,22 @@
 from ipywidgets import VBox, HBox, Text, HTML, Label, Layout, Button
+import pandas as pd
+
+from realestate_core.common.utils import join_df
+
+# Monkey patch this to pd.DataFrame
+pd.DataFrame.render = lambda self, **kwargs: EditableDataFrame(df=self, **kwargs).render()
 
 class EditableDataFrame:
-  def __init__(self, df, display_cols=[], editable_cols=[], longtext_cols=[], html_cols=[], n_row_per_page=10, long_text_width='400px'):
+  def __init__(self, 
+               df: pd.DataFrame, 
+               display_cols=[], 
+               editable_cols=[], 
+               longtext_cols=[], 
+               html_cols=[], 
+               n_row_per_page=10, 
+               long_text_width='400px',
+               aux_df=None,
+               aux_key=None):
     self.df = df
     assert self.df.index.is_unique, "df's index must be unique for editing to work correctly."
 
@@ -39,6 +54,10 @@ class EditableDataFrame:
     # long text width in px
     self.long_text_width = long_text_width
 
+    # render with aux info provided by aux_df, using aux_key as join key with self._display_df
+    self.aux_df = aux_df
+    if self.aux_df is not None: assert aux_key is not None, 'aux_key must be provided if aux_df is provided'
+    self.aux_key = aux_key
 
   @property
   def filter(self):
@@ -50,6 +69,12 @@ class EditableDataFrame:
     self._display_df = self.df.q(self._criteria)[self.display_cols]
     self._indices = None   # indices not used if filter is provided, and vice versa
 
+  def filter_by(self, col_name, values) -> 'EditableDataFrame':
+    idxs = [self.df.index[self.df[col_name] == value][0] for value in values]
+    self.indices = idxs
+    return self
+
+
   @property
   def indices(self):
     return self._indices
@@ -57,7 +82,16 @@ class EditableDataFrame:
   @indices.setter
   def indices(self, new_indices):
     self._indices = new_indices
-    self._display_df = self.df.loc[self._indices][self.display_cols]
+
+    display_cols_in_df = [c for c in self.display_cols if c in self.df.columns]
+    self._display_df = self.df.loc[self._indices][display_cols_in_df]
+
+    if self.aux_df is not None:   # join this with _display_df
+      self._display_df = self._display_df.reset_index()
+      self._display_df = join_df(self._display_df, self.aux_df, left_on=self.aux_key, how='left')
+      self._display_df = self._display_df.set_index(self._display_df.columns[0])
+
+      self._display_df = self._display_df[self.display_cols]
     self._criteria = None  # critera filter not used if indices is provided, and vice versa
 
   def set_indices(self, new_indices):
@@ -67,7 +101,8 @@ class EditableDataFrame:
   def render(self) -> VBox:  
     # assert self._display_df is not None, 'a filter or indice must be provided'
     if self._display_df is None:
-      self.indices = self.df.index    # all of them
+      self.indices = self.df.index    # all of them, Note: this trigger setter call and populate self._display_df
+      
     
     # if len(self.longtext_cols) > 0:
     #   longtext_col = self.longtext_cols[0]

@@ -2,7 +2,7 @@ import pandas as pd
 from realestate_spam.data.preprocessing import BalancedSampler
 
 def test_balanced_sampler():
-  df = pd.read_feather('tests/unit_test_display_names_df')
+  df = pd.read_feather('unit_test_display_names_df')
 
   N = 32
 

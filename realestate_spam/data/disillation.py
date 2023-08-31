@@ -88,13 +88,14 @@ class KMeansSamplingDataDistiller(DataDistiller):
     self.centroids = kmeans.cluster_centers_
 
 
-  def distill(self, n_nearest=3, n_furthest=5, random_state=42) -> pd.DataFrame:
+  def distill(self, n_clusters=10, n_nearest=3, n_furthest=5, random_state=42) -> pd.DataFrame:
     if f'reduced_{self.embedding_col}' not in self.df.columns:
       print(f'reduce_{self.embedding_col} column not found, generating them ...')
       self.dim_reduce(random_state=random_state)
     
     if (not hasattr(self, 'labels') or self.labels is None):   # no cluster labels found
       print('cluster labels not found, running generate_clusters(...)')
+      self.generate_clusters(n_clusters=n_clusters, random_state=random_state)
 
     reduced_embeddings = np.array(self.df[f'reduce_{self.embedding_col}'].values.tolist())
 
