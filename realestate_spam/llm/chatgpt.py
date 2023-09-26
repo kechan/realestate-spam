@@ -3,7 +3,7 @@ from raa import RAA
 
 import json
 
-from ..utils.misc import num_tokens_from_string
+from ..utils.misc import num_tokens_from_string, num_tokens_from_messages
 
 class DisplayNameOriginAgent:
   def __init__(self, system_prompt: str = None, 
@@ -57,29 +57,33 @@ Provide only the JSON output without any additional text or explanation.
 
 
 class FirstTouchNoteSpamDetectorAgent:
-  def __init__(self, 
+  def __init__(self,
+               llm_model: str,
                system_prompt: str = None, 
                guidelines: List[str] = None, 
+
+               use_n_shot: bool = False, 
                spam_n_shot_samples: List[str] = None,
                not_spam_n_shot_samples: List[str] = None,
-               test_n_shot_samples: List[str] = None):
+               test_n_shot_samples: List[str] = None
+               ):
     
+    self.llm_model = llm_model
     self.system_prompt = system_prompt
     self.guidelines = guidelines
-    self.spam_n_shot_samples = spam_n_shot_samples
-    self.not_spam_n_shot_samples = not_spam_n_shot_samples
-    self.test_n_shot_samples = test_n_shot_samples
+
+    self.use_n_shot = use_n_shot
+    if self.use_n_shot:
+      self.spam_n_shot_samples = spam_n_shot_samples
+      self.not_spam_n_shot_samples = not_spam_n_shot_samples
+      self.test_n_shot_samples = test_n_shot_samples
 
     self.inputs = None    # placeholder for prediction inputs
-
-    assert self.spam_n_shot_samples is not None, 'spam_n_shot_samples must be provided'
-    assert self.not_spam_n_shot_samples is not None, 'not_spam_n_shot_samples must be provided'
-    assert self.test_n_shot_samples is not None, 'test_n_shot_samples must be provided'
 
     if self.guidelines is None:   # default available
       self.guidelines = [
         "If the message is related to buying, selling, renting, or inquiring about a property, then it is NOT_SPAM.",
-        "If the message concerns home valuation, real estate career inquiry, etc., it is NOT_SPAM",
+        "If the message concerns home valuation, it is NOT_SPAM",
         "Personal narrative, story, or anecdote that is unrelated to real estate, classify it as SPAM",
         "If the sender is promoting services such as SEO, web site traffic optimization, photography, personal brand promotions, painting services, etc., classify them as SPAM.",
         "If names look random string, bias it towards being a SPAM. However, if the message is related to (1), classify it as NOT_SPAM.",
@@ -92,13 +96,14 @@ class FirstTouchNoteSpamDetectorAgent:
       ]
     guidelines_as_str = '\n'.join([f"{i+1}) {g}" for i, g in enumerate(self.guidelines)])
 
-    # format n_shot_samples as long string
-    n_shot_sample_for_spam = '\n'.join([f'SPAM, {s}' for s in spam_n_shot_samples])
-    print(f'# token used for spam samples: {num_tokens_from_string(n_shot_sample_for_spam)}')
-    n_shot_sample_for_not_spam = '\n'.join([f'NOT_SPAM, {s}' for s in not_spam_n_shot_samples])
-    print(f'# token used for not_spam samples: {num_tokens_from_string(n_shot_sample_for_not_spam)}')
-    n_shot_sample_for_test = '\n'.join([f'TEST, {s}' for s in test_n_shot_samples])
-    print(f'# token used for test samples: {num_tokens_from_string(n_shot_sample_for_test)}')
+    if self.use_n_shot:
+      # format n_shot_samples as long string
+      n_shot_sample_for_spam = '\n'.join([f'SPAM, {s}' for s in spam_n_shot_samples])
+      print(f'# token used for spam samples: {num_tokens_from_string(n_shot_sample_for_spam)}')
+      n_shot_sample_for_not_spam = '\n'.join([f'NOT_SPAM, {s}' for s in not_spam_n_shot_samples])
+      print(f'# token used for not_spam samples: {num_tokens_from_string(n_shot_sample_for_not_spam)}')
+      n_shot_sample_for_test = '\n'.join([f'TEST, {s}' for s in test_n_shot_samples])
+      print(f'# token used for test samples: {num_tokens_from_string(n_shot_sample_for_test)}')
 
     if system_prompt is None:   # use default 
       self.system_prompt = f"""You are a spam classifier able to classify messages into NOT_SPAM, SPAM, and TEST for a real estate agent app. 
@@ -106,6 +111,9 @@ The body of each message will be preceded by "DISPLAY_NAME is ... " to specify t
 
 Please use the following guidelines: 
 {guidelines_as_str}
+"""
+      if self.use_n_shot:
+        self.system_prompt += f"""
 
 Here are a few examples for you to learn:
 {n_shot_sample_for_spam}
@@ -113,22 +121,13 @@ Here are a few examples for you to learn:
 {n_shot_sample_for_test}
 """
 
-    self.raa = RAA(sys_prompt=self.system_prompt)    # chatgpt completion API wrapped up as an agent
+    self.raa = RAA(llm_model=self.llm_model, sys_prompt=self.system_prompt)    # chatgpt completion API wrapped up as an agent
 
 
-  def predict(self, texts: List[str]) -> List[Dict]: 
+  def predict(self, texts: List[str], temperature=0.1, debug=False) -> List[Dict]: 
 
-    inputs = '\n'.join([f"<input>{text}</input>" for text in texts])
-    user_prompt = f"""
-    Can you please classify the following messages delimited by <inputs> and </inputs>? 
-<inputs>
-{inputs}
-</inputs>
-please provide predictions for each with either "NOT_SPAM", "SPAM", "TEST" or "NOT_SURE" together with your reasonings in less than 20 words 
-in the format of json that is a list of dict with keys "Prediction" and "Reasoning". Provide only the JSON output without any additional text or explanation.
-"""
-    messages = [{"role": "user", "content": user_prompt}]
-    predictions_str = self.raa.get_completion_from_messages(messages, temperature=0.1, max_tokens=500, debug=False)
+    messages = self.construct_openai_user_prompt(texts)
+    predictions_str = self.raa.get_completion_from_messages(messages, temperature=temperature, max_tokens=500, debug=debug)
 
     # Expected return is a json formatted answer
     # Verify if predictions_str parsed to a dict (i.e. valid json)
@@ -138,6 +137,16 @@ in the format of json that is a list of dict with keys "Prediction" and "Reasoni
       raise ValueError(f'Malformed json response: {predictions_str}')
 
     return predictions
+  
+  def calc_cost_estimate(self, texts: List[str]) -> int:
+    messages = self.construct_openai_user_prompt(texts)
+    messages.insert(0, {"role": "system", "content": self.system_prompt})
+    n_tokens = num_tokens_from_messages(messages)
+
+    min_cost = n_tokens/1000 * 0.004
+    max_cost = n_tokens/1000 * 0.12 
+    return n_tokens, round(min_cost, 4), round(max_cost, 4)
+
   
   def recover_json(self, s: str):
     """
@@ -161,6 +170,15 @@ in the format of json that is a list of dict with keys "Prediction" and "Reasoni
     return None
 
   def print_prompt(self, inputs: List[str]) -> str:
+    messages = self.construct_openai_user_prompt(inputs)
+    user_prompt = messages[-1]['content']
+
+    return self.system_prompt + "\n" + user_prompt + "\n"
+    
+  def construct_openai_user_prompt(self, inputs: List[str]) -> List[Dict]:
+    """
+    Construct messages to send to openai
+    """
     inputs = '\n'.join([f"<input>{text}</input>" for text in inputs])
     user_prompt = f"""
     Can you please classify the following messages delimited by <inputs> and </inputs>? 
@@ -170,8 +188,9 @@ in the format of json that is a list of dict with keys "Prediction" and "Reasoni
 please provide predictions for each with either "NOT_SPAM", "SPAM", "TEST" or "NOT_SURE" together with your reasonings in less than 20 words 
 in the format of json that is a list of dict with keys "Prediction" and "Reasoning". Provide only the JSON output without any additional text or explanation.
 """
-    return self.system_prompt + "\n" + user_prompt + "\n"
-    
+    messages = [{"role": "user", "content": user_prompt}]
+
+    return messages
 
 class DataAugmentationAgent:
   def __init__(self, system_prompt: str = None, num_of_takes = 5, max_words=50):
