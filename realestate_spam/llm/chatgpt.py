@@ -1,6 +1,7 @@
 from typing import List, Dict
 from raa import RAA    
 from tenacity import RetryError
+import openai
 try:
   from openai.error import OpenAIError, APIConnectionError
 except:
