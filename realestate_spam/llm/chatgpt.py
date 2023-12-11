@@ -1,7 +1,10 @@
 from typing import List, Dict
 from raa import RAA    
 from tenacity import RetryError
-from openai.error import OpenAIError, APIConnectionError
+try:
+  from openai.error import OpenAIError, APIConnectionError
+except:
+  print("Not importing OpenAIError from openai.error, newer version has changed")
 import json, re
 
 from ..utils.misc import num_tokens_from_string, num_tokens_from_messages
@@ -324,17 +327,38 @@ class LocalLogicGPTRewriter:
       # print(type(last_attempt.exception()))
 
       if last_attempt:
-        try:
-          last_attempt.result()
-        except OpenAIError as oe:
-          error_message += str(oe)
-          if hasattr(oe, 'error'):
-            error_message += f" OpenAI Error: {oe.error.get('message', None)}" 
-          if hasattr(oe, 'chat_messages'):
-            error_message += f" Chat messages: {oe.chat_messages}"
-        except Exception as e:
-          print(f'caught a generic exception: {e}')
-          error_message += str(e)
+        if self.raa.openai_version == ">=1.3.0":
+          try:
+            last_attempt.result()
+          except openai.APIError as ae:
+            error_message += str(ae)
+            if hasattr(ae, 'error'):
+              error_message += f" OpenAI Error: {ae.error.get('message', None)}" 
+            if hasattr(ae, 'chat_messages'):
+              error_message += f" Chat messages: {ae.chat_messages}"
+          except openai.APIConnectionError as ace:
+            error_message += str(ace)
+            if hasattr(ace, 'chat_messages'):
+              error_message += f" Chat messages: {ace.chat_messages}"
+          except openai.APIStatusError as ase:
+            error_message += str(ase)
+            if hasattr(ase, 'chat_messages'):
+              error_message += f" Chat messages: {ase.chat_messages}"
+          except Exception as e:
+            print(f'caught a generic exception: {e}')
+            error_message += str(e)
+        else:
+          try:
+            last_attempt.result()
+          except OpenAIError as oe:
+            error_message += str(oe)
+            if hasattr(oe, 'error'):
+              error_message += f" OpenAI Error: {oe.error.get('message', None)}" 
+            if hasattr(oe, 'chat_messages'):
+              error_message += f" Chat messages: {oe.chat_messages}"
+          except Exception as e:
+            print(f'caught a generic exception: {e}')
+            error_message += str(e)
     
     except Exception as e:      
       error_message += str(e)
