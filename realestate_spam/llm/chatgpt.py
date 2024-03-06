@@ -446,10 +446,11 @@ For stats and numeric info that are agnostic to property type {self.property_typ
 IMPORTANT
 
 0. Wrap each section in its own tag, e.g. <housing></housing>
-1. For housing if present, always start with 'Homes for sale in {{whatever city}}'.
-2. output something with roughly the same # of words each. 
-3. Verbiage may not be too "flowery"
-4. Be sure to retain numerical and highway or major street info.
+1. Ensure the rewrite is in the same language as the original content.
+2. For housing if present, always start with 'Homes for sale in {{whatever city}}'.
+3. output something with roughly the same # of words each. 
+4. Verbiage may not be too "flowery"
+5. Be sure to retain numerical and highway or major street info.
 """      
     else:    
       guidelines = f"""
@@ -457,10 +458,11 @@ IMPORTANT
 IMPORTANT
 
 0. Wrap each section in its own tag, e.g. <housing></housing>
-1. For housing if present, always start with '{self.property_pluralized} for sale in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}.
-2. output something with roughly the same # of words each. 
-3. Verbiage may not be too "flowery"
-4. Be sure to retain numerical and highway or major street info.
+1. Ensure the rewrite is in the same language as the original content.
+2. For housing if present, always start with '{self.property_pluralized} for sale in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}.
+3. output something with roughly the same # of words each. 
+4. Verbiage may not be too "flowery"
+5. Be sure to retain numerical and highway or major street info.
 """      
 
     if use_rag:
@@ -501,13 +503,6 @@ IMPORTANT
 
     return parsed_response
 
-
-
-
-
-
-    
-    
 
 
 def fast_extract_valid_json(s: str):
