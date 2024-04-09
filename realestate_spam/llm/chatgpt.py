@@ -250,13 +250,19 @@ each other as message_0 is from message_1.
     
 
 class LocalLogicGPTRewriter:
-  def __init__(self, llm_model: str, available_sections = ['housing', 'transport', 'services', 'character'], property_type: str = None):
+  def __init__(self, 
+               llm_model: str, 
+               available_sections = ['housing', 'transport', 'services', 'character'], 
+               property_type: str = None,
+               include_start_with_guideline: bool = True
+               ):
     self.llm_model = llm_model
     self.available_sections = available_sections.copy()  
     self._sections = available_sections.copy()
     self.property_type = property_type
+    self.include_start_with_guideline = include_start_with_guideline
 
-    self.property_pluralized = None
+    self.property_pluralized = None    
     if self.property_type is not None:
       if self.property_type.lower() == 'condo':
         self.property_pluralized = "Condos"
@@ -268,8 +274,19 @@ class LocalLogicGPTRewriter:
         self.property_pluralized = "Luxury Homes"
       elif self.property_type.lower() == 'investment':
         self.property_pluralized = "Investment Properties"
+      elif self.property_type.lower() == 'rental':
+        self.property_pluralized = "Residential Rental Properties"
       else:
         self.property_pluralized = f"{self.property_type.capitalize()} Homes"
+
+    self.property_pluralized_used_in_start_with = None
+    if self.property_type is not None:
+      if self.property_type.lower() != 'rental':
+        self.property_pluralized_used_in_start_with = self.property_pluralized + " for sale"
+      elif self.property_type.lower() == 'rental':
+        self.property_pluralized_used_in_start_with = "Apartments, Condos and Houses for rent"
+      else:
+        self.property_pluralized_used_in_start_with = self.property_pluralized + " for sale"
 
     self._construct_sys_prompt()
 
@@ -446,8 +463,11 @@ For stats and numeric info that are agnostic to property type {self.property_typ
 IMPORTANT
 
 0. Wrap each section in its own tag, e.g. <housing></housing>
-1. Ensure the rewrite is in the same language as the original content.
-2. For housing if present, always start with 'Homes for sale in {{whatever city}}'.
+1. Ensure the rewrite is in the same language as the original content."""
+      if self.include_start_with_guideline:
+        guidelines += f"""
+2. For housing if present, always start with 'Homes for sale in {{whatever city}}'."""
+      guidelines += f"""
 3. output something with roughly the same # of words each. 
 4. Verbiage may not be too "flowery"
 5. Be sure to retain numerical and highway or major street info.
@@ -458,8 +478,11 @@ IMPORTANT
 IMPORTANT
 
 0. Wrap each section in its own tag, e.g. <housing></housing>
-1. Ensure the rewrite is in the same language as the original content.
-2. For housing if present, always start with '{self.property_pluralized} for sale in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}.
+1. Ensure the rewrite is in the same language as the original content."""
+      if self.include_start_with_guideline:
+        guidelines += f"""
+2. For housing if present, always start with '{self.property_pluralized_used_in_start_with} in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}."""
+      guidelines += f"""
 3. output something with roughly the same # of words each. 
 4. Verbiage may not be too "flowery"
 5. Be sure to retain numerical and highway or major street info.
