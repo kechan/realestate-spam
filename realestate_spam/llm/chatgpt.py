@@ -254,12 +254,14 @@ class LocalLogicGPTRewriter:
                llm_model: str, 
                available_sections = ['housing', 'transport', 'services', 'character'], 
                property_type: str = None,
+               transaction_type: str = 'SALE',
                include_start_with_guideline: bool = True
                ):
     self.llm_model = llm_model
     self.available_sections = available_sections.copy()  
     self._sections = available_sections.copy()
     self.property_type = property_type
+    self.transaction_type = transaction_type
     self.include_start_with_guideline = include_start_with_guideline
 
     self.property_pluralized = None    
@@ -466,7 +468,8 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, always start with 'Homes for sale in {{whatever city}}'."""
+2. For housing if present, always start with 'Homes for sale in {{whatever city}}'.""" if self.transaction_type == 'SALE' else f"""
+2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}'."""
       guidelines += f"""
 3. output something with roughly the same # of words each. 
 4. Verbiage may not be too "flowery"
