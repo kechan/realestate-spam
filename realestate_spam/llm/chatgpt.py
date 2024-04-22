@@ -255,6 +255,7 @@ class LocalLogicGPTRewriter:
                available_sections = ['housing', 'transport', 'services', 'character'], 
                property_type: str = None,
                transaction_type: str = 'SALE',
+               sentence_limit: int = None,
                include_start_with_guideline: bool = True
                ):
     self.llm_model = llm_model
@@ -262,6 +263,7 @@ class LocalLogicGPTRewriter:
     self._sections = available_sections.copy()
     self.property_type = property_type
     self.transaction_type = transaction_type
+    self.sentence_limit = sentence_limit
     self.include_start_with_guideline = include_start_with_guideline
 
     self.property_pluralized = None    
@@ -470,8 +472,15 @@ IMPORTANT
         guidelines += f"""
 2. For housing if present, always start with 'Homes for sale in {{whatever city}}'.""" if self.transaction_type == 'SALE' else f"""
 2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}'."""
+  
+      if self.sentence_limit is None:
+        guidelines += f"""
+3. output something with roughly the same # of words each."""
+      else:
+        guidelines += f"""
+3. keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words."""
+
       guidelines += f"""
-3. output something with roughly the same # of words each. 
 4. Verbiage may not be too "flowery"
 5. Be sure to retain numerical and highway or major street info.
 """      
@@ -485,11 +494,17 @@ IMPORTANT
       if self.include_start_with_guideline:
         guidelines += f"""
 2. For housing if present, always start with '{self.property_pluralized_used_in_start_with} in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}."""
+      if self.sentence_limit is None:
+        guidelines += f"""
+3. output something with roughly the same # of words each.""" 
+      else:
+        guidelines += f"""
+3. keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words. Give the average (lease) price higher priority."""
+
       guidelines += f"""
-3. output something with roughly the same # of words each. 
 4. Verbiage may not be too "flowery"
 5. Be sure to retain numerical and highway or major street info.
-"""      
+"""
 
     if use_rag:
       user_prompt = (rag_string if rag_string is not None else "") + "\n".join(section_strings) + guidelines
