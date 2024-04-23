@@ -478,7 +478,7 @@ IMPORTANT
 3. output something with roughly the same # of words each."""
       else:
         guidelines += f"""
-3. keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words."""
+3. Keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words."""
 
       guidelines += f"""
 4. Verbiage may not be too "flowery"
@@ -499,7 +499,7 @@ IMPORTANT
 3. output something with roughly the same # of words each.""" 
       else:
         guidelines += f"""
-3. keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words. Give the average (lease) price higher priority."""
+3. Keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words (summarize). Give the average (lease) price higher priority, should be mentioned if available and always attribute it exclusively to the rental market, without reference to homeownership."""
 
       guidelines += f"""
 4. Verbiage may not be too "flowery"
