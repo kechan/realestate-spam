@@ -470,8 +470,8 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, always start with 'Homes for sale in {{whatever city}}'.""" if self.transaction_type == 'SALE' else f"""
-2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}'."""
+2. For housing if present, always start with 'Homes for sale in {{whatever city}}' and immediately incorporate all provided data points (average price, market percentages, etc.) in the first sentence.""" if self.transaction_type == 'SALE' else f"""
+2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}' and immediately incorporate all provided data points (average lease price, etc.) in the first sentence."""
   
       if self.sentence_limit is None:
         guidelines += f"""
@@ -493,7 +493,7 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, always start with '{self.property_pluralized_used_in_start_with} in {{whatever city}}', and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}."""
+2. For housing if present, always start with '{self.property_pluralized_used_in_start_with} in {{whatever city}}' and immediately incorporate all provided data points (average price, market percentages, etc.) in the first sentence, and be sure to retain {self.property_type.lower()} agnostic info without referring to {self.property_type.lower()}."""
       if self.sentence_limit is None:
         guidelines += f"""
 3. output something with roughly the same # of words each.""" 
