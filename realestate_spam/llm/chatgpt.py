@@ -470,21 +470,36 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, always start with 'Homes for sale in {{whatever city}}' and immediately incorporate all provided data points (average price, market percentages, etc.) in the first sentence.""" if self.transaction_type == 'SALE' else f"""
+2. For housing if present, the first sentence must state: 'As of {{as-of month}}, there are {{active listing count}} homes for sale in {{city}}, {{province}}, with a median MLS® list price of {{overall median list price}}.' Use the As-of month, active-listing-count, overall-median, and province data points above for the bracketed values; infer the city name from the original content as before.
+3. Immediately follow with a second sentence starting 'By property type, the median was' that reports the median list price for each property-type data point provided above, in the order detached, semi-detached, townhouse, condominium. If a data point is genuinely missing, omit that property type rather than inventing a value.
+4. Do not use the word "average" anywhere -- all figures are medians.""" if self.transaction_type == 'SALE' else f"""
 2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}' and immediately incorporate all provided data points (average lease price, etc.) in the first sentence."""
-  
+
+      city_level_sale = self.include_start_with_guideline and self.transaction_type == 'SALE'
+
       if self.sentence_limit is None:
-        guidelines += f"""
-3. output something with roughly the same # of words each."""
+        if city_level_sale:
+          guidelines += f"""
+5. Prioritize quantitative, factual content over descriptive/qualitative content. The metrics sentences above, plus any percentage or numeric facts from the original content (e.g. ownership/rental tenure, building-age/construction-era breakdown), should be retained in plain factual language. More qualitative or descriptive material from the original content (e.g. general characterizations of dwelling-type mix or bedroom-size composition) should be compressed tightly, or omitted if it doesn't add meaningful numeric value beyond what's already stated -- do not preserve or embellish it at length.
+6. Do not pad length to match the original -- a shorter result that keeps only the substantive quantitative content is preferred over a longer one that retains all original material."""
+        else:
+          guidelines += f"""
+5. output something with roughly the same # of words each."""
       else:
         guidelines += f"""
-3. Keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words."""
+5. Keep output to no more than {self.sentence_limit} sentences long and between {self.sentence_limit*15} and {self.sentence_limit*20} words."""
 
-      guidelines += f"""
-4. Verbiage may not be too "flowery"
-5. Be sure to retain numerical and highway or major street info.
-"""      
-    else:    
+      if city_level_sale and self.sentence_limit is None:
+        guidelines += f"""
+7. Verbiage may not be too "flowery"; state facts plainly, with no added descriptive or qualitative commentary beyond what's explicitly retained.
+8. Be sure to retain numerical and highway or major street info.
+"""
+      else:
+        guidelines += f"""
+6. Verbiage may not be too "flowery"
+7. Be sure to retain numerical and highway or major street info.
+"""
+    else:
       guidelines = f"""
 
 IMPORTANT
