@@ -470,7 +470,7 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, the first sentence must state: 'As of {{as-of month}}, there are {{active listing count}} homes for sale in {{city}}, {{province}}, with a median MLS® list price of {{overall median list price}}.' Use the As-of month, active-listing-count, overall-median, and province data points above for the bracketed values; infer the city name from the original content as before.
+2. For housing if present, the first sentence must state: 'At the end of {{as-of month}}, there were {{active listing count}} homes for sale in {{city}}, {{province}}, with a median MLS® list price of {{overall median list price}} across all property types.' Use the As-of month, active-listing-count, overall-median, and province data points above for the bracketed values; infer the city name from the original content as before. Keep the opening in past tense.
 3. Immediately follow with a second sentence starting 'By property type, the median was' that reports the median list price for each property-type data point provided above, in the order detached, semi-detached, townhouse, condominium. If a data point is genuinely missing, omit that property type rather than inventing a value.
 4. Do not use the word "average" anywhere -- all figures are medians.""" if self.transaction_type == 'SALE' else f"""
 2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}' and immediately incorporate all provided data points (average lease price, etc.) in the first sentence."""
