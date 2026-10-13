@@ -256,7 +256,8 @@ class LocalLogicGPTRewriter:
                property_type: str = None,
                transaction_type: str = 'SALE',
                sentence_limit: int = None,
-               include_start_with_guideline: bool = True
+               include_start_with_guideline: bool = True,
+               preserve_meaning_guideline: bool = False
                ):
     self.llm_model = llm_model
     self.available_sections = available_sections.copy()  
@@ -265,6 +266,8 @@ class LocalLogicGPTRewriter:
     self.transaction_type = transaction_type
     self.sentence_limit = sentence_limit
     self.include_start_with_guideline = include_start_with_guideline
+    # city-level only (property_type is None): append the "preserve the meaning" guideline
+    self.preserve_meaning_guideline = preserve_meaning_guideline
 
     self.property_pluralized = None    
     if self.property_type is not None:
@@ -470,7 +473,7 @@ IMPORTANT
 1. Ensure the rewrite is in the same language as the original content."""
       if self.include_start_with_guideline:
         guidelines += f"""
-2. For housing if present, the first sentence must state: 'At the end of {{as-of month}}, there were {{active listing count}} homes for sale in {{city}}, {{province}}, with a median MLS® list price of {{overall median list price}} across all property types.' Use the As-of month, active-listing-count, overall-median, and province data points above for the bracketed values; infer the city name from the original content as before. Keep the opening in past tense.
+2. For housing if present, the first sentence must state: 'At the end of {{as-of month}}, there were {{active listing count}} homes for sale in {{place name}}, {{province}}, with a median MLS® list price of {{overall median list price}} across all property types.' Use the As-of month, active-listing-count, overall-median, Place name, and province data points above for the bracketed values, exactly as given. Do not replace the Place name with any other place mentioned in the original content (e.g. a metropolitan area, region, or neighbouring city), and do not use a generic phrase such as "this city" or "this municipality" in this sentence. All figures and facts describe the Place name only -- if the original content mentions a larger area (e.g. "this part of the Greater X metropolitan area"), that only describes where the place is located; never attribute its listings, prices, or percentages to the larger area. After the first sentence you may refer to the place by its Place name or by the generic term the original content uses (e.g. "this town", "this municipality").
 3. Immediately follow with a second sentence starting 'By property type, the median was' that reports the median list price for each property-type data point provided above, in the order detached, semi-detached, townhouse, condominium. If a data point is genuinely missing, omit that property type rather than inventing a value.
 4. Do not use the word "average" anywhere -- all figures are medians.""" if self.transaction_type == 'SALE' else f"""
 2. For housing if present, always start with 'Houses and Condos for rent in {{whatever city}}' and immediately incorporate all provided data points (average lease price, etc.) in the first sentence."""
@@ -498,6 +501,15 @@ IMPORTANT
         guidelines += f"""
 6. Verbiage may not be too "flowery"
 7. Be sure to retain numerical and highway or major street info.
+"""
+
+      if self.preserve_meaning_guideline:
+        guideline_num = 9 if (city_level_sale and self.sentence_limit is None) else 8
+        guidelines += f"""{guideline_num}. Preserve the meaning of every fact you keep. You may reword, but you may not change what is being claimed:
+   - Keep qualifiers and hedges at the same strength (e.g. mainly, mostly, roughly, about, nearly, many, the majority of). Do not drop, strengthen, or weaken them: "the remainder are mainly townhouses" must not become "townhouses account for the rest".
+   - Keep what each figure measures. A share of residents/population stays about people (owners, renters); a share of units/dwellings stays about dwellings (owner-occupied, rented). Do not mix the two in one sentence.
+   - "Rented" means occupied by renters. Never rephrase it as "available for rent" or "for rent".
+   - If you cannot rephrase a fact without changing its meaning, keep the original wording.
 """
     else:
       guidelines = f"""
