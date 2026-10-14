@@ -326,7 +326,8 @@ class LocalLogicGPTRewriter:
 
     messages = self.construct_openai_user_prompt(params_dict=params_dict, use_rag=use_rag, **kwargs)
     try:
-      prediction_str = self.raa.get_completion_from_messages(messages, temperature=1.0, max_tokens=1000, debug=False)
+      # 3000: headroom for hidden reasoning tokens on gpt-5.6-luna and newer (cap, not cost)
+      prediction_str = self.raa.get_completion_from_messages(messages, temperature=1.0, max_tokens=3000, debug=False)
       # parse housing, transport, services, character from prediction_str
       # simulate invalid prediction_str 
       # prediction_str = "corrupted junk"
